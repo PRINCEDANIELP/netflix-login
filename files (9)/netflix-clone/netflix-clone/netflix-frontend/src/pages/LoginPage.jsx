@@ -70,28 +70,86 @@ const LoginPage = ({ onLoginSuccess }) => {
     return Object.keys(newErrors).length === 0;
   };
 
+  // Helper: get locally registered users from localStorage
+  const getLocalUsers = () => {
+    try {
+      return JSON.parse(localStorage.getItem('netflix_local_users') || '[]');
+    } catch { return []; }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setServerError('');
     if (mode === 'login' ? !validateLogin() : !validateRegister()) return;
     setLoading(true);
-    try {
-      const BASE_URL = import.meta.env.VITE_API_URL || '';
-      const endpoint = mode === 'login'
-        ? `${BASE_URL}/api/login`
-        : `${BASE_URL}/api/register`;
-      const payload = mode === 'login'
-        ? { email, password }
-        : { name, email, password };
 
-      const response = await fetch(endpoint, {
+    // Simulate a small delay for UX
+    await new Promise(r => setTimeout(r, 600));
+
+    try {
+      if (mode === 'register') {
+        // Check server mock users + local users for existing email
+        const localUsers = getLocalUsers();
+        const alreadyExists = localUsers.find(u => u.email === email);
+        if (alreadyExists) {
+          setServerError('Email already registered');
+          return;
+        }
+        // Also check server mock accounts
+        const BASE_URL = import.meta.env.VITE_API_URL || '';
+        try {
+          const res = await fetch(`${BASE_URL}/api/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, email, password }),
+          });
+          const data = await res.json();
+          if (res.status === 409) {
+            setServerError('Email already registered');
+            return;
+          }
+        } catch (_) { /* server offline, continue with local */ }
+
+        // Save new user to localStorage for persistence
+        const newUser = { id: Date.now(), email, name, password };
+        localStorage.setItem('netflix_local_users', JSON.stringify([...localUsers, newUser]));
+
+        if (rememberMe) {
+          localStorage.setItem('netflix_remembered_email', email);
+          localStorage.setItem('netflix_remember_me', 'true');
+        } else {
+          localStorage.removeItem('netflix_remembered_email');
+          localStorage.setItem('netflix_remember_me', 'false');
+        }
+        onLoginSuccess({ id: newUser.id, email: newUser.email, name: newUser.name }, rememberMe);
+        return;
+      }
+
+      // LOGIN: check locally registered users first
+      const localUsers = getLocalUsers();
+      const localUser = localUsers.find(u => u.email === email && u.password === password);
+      if (localUser) {
+        if (rememberMe) {
+          localStorage.setItem('netflix_remembered_email', email);
+          localStorage.setItem('netflix_remember_me', 'true');
+        } else {
+          localStorage.removeItem('netflix_remembered_email');
+          localStorage.setItem('netflix_remember_me', 'false');
+        }
+        onLoginSuccess({ id: localUser.id, email: localUser.email, name: localUser.name }, rememberMe);
+        return;
+      }
+
+      // Fallback: check server mock demo accounts
+      const BASE_URL = import.meta.env.VITE_API_URL || '';
+      const response = await fetch(`${BASE_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ email, password }),
       });
       const data = await response.json();
       if (!response.ok) {
-        setServerError(data.message || 'Authentication failed. Please try again.');
+        setServerError(data.message || 'Invalid email or password');
         return;
       }
       if (rememberMe) {
