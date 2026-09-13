@@ -1,8 +1,5 @@
 {
   "buildCommand": "cd 'files (9)/netflix-clone/netflix-clone/netflix-frontend' && npm install && npm run build",
   "outputDirectory": "files (9)/netflix-clone/netflix-clone/netflix-frontend/dist",
-  "installCommand": "echo 'deps handled in build'",
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" }
-  ]
+  "installCommand": "echo 'deps handled in build'"
 }
