@@ -3,6 +3,7 @@ const mockUsers = [
   { id: 1, email: 'demo@example.com', password: 'password123', name: 'Demo User' },
   { id: 2, email: 'test@netflix.com', password: 'netflix123', name: 'Test User' },
   { id: 3, email: 'user@example.com', password: 'secure456', name: 'Regular User' },
+  { id: 4, email: 'princedaniel081104@gmail.com', password: 'prince123', name: 'Prince Daniel' },
 ];
 
 function generateMockToken(userId) {
