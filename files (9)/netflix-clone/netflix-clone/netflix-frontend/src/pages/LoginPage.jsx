@@ -165,27 +165,35 @@ const LoginPage = ({ onLoginSuccess }) => {
         return;
       }
 
-      // 3. Fallback backend check if backend server is running
-      const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      try {
-        const response = await fetch(`${BASE_URL}/api/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-        });
-        const data = await response.json();
-        if (response.ok && data.success) {
-          if (rememberMe) {
-            localStorage.setItem('netflix_remembered_email', email);
-            localStorage.setItem('netflix_remember_me', 'true');
-          } else {
-            localStorage.removeItem('netflix_remembered_email');
-            localStorage.setItem('netflix_remember_me', 'false');
+      // 3. Fallback backend check if backend server is running (only when on localhost or VITE_API_URL is configured)
+      const isLocalhost =
+        typeof window !== 'undefined' &&
+        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+      const BASE_URL = import.meta.env.VITE_API_URL || (isLocalhost ? 'http://localhost:5000' : '');
+
+      if (BASE_URL) {
+        try {
+          const response = await fetch(`${BASE_URL}/api/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password }),
+          });
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+              if (rememberMe) {
+                localStorage.setItem('netflix_remembered_email', email);
+                localStorage.setItem('netflix_remember_me', 'true');
+              } else {
+                localStorage.removeItem('netflix_remembered_email');
+                localStorage.setItem('netflix_remember_me', 'false');
+              }
+              onLoginSuccess(data.user || { email, name: email.split('@')[0] }, rememberMe);
+              return;
+            }
           }
-          onLoginSuccess(data.user || { email, name: email.split('@')[0] }, rememberMe);
-          return;
-        }
-      } catch (_) { /* backend not reachable, proceed to show error */ }
+        } catch (_) { /* backend not reachable on network */ }
+      }
 
       setServerError('Invalid email or password');
     } catch (error) {
