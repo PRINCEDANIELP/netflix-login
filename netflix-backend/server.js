@@ -20,18 +20,6 @@ const mockUsers = [
     email: 'demo@example.com',
     password: 'password123',
     name: 'Demo User'
-  },
-  {
-    id: 2,
-    email: 'test@netflix.com',
-    password: 'netflix123',
-    name: 'Test User'
-  },
-  {
-    id: 3,
-    email: 'user@example.com',
-    password: 'secure456',
-    name: 'Regular User'
   }
 ];
 
@@ -54,15 +42,23 @@ app.post('/api/login', (req, res) => {
 
   // Simulate database delay
   setTimeout(() => {
-    // Find user
+    const cleanEmail = email.toLowerCase().trim();
+    // Find user by email
     const user = mockUsers.find(
-      u => u.email === email && u.password === password
+      u => u.email.toLowerCase() === cleanEmail
     );
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password'
+        message: 'New user, please sign up first'
+      });
+    }
+
+    if (user.password !== password) {
+      return res.status(401).json({
+        success: false,
+        message: 'Login failed: Incorrect password.'
       });
     }
 

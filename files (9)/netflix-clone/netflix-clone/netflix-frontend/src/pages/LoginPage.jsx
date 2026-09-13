@@ -86,11 +86,17 @@ const LoginPage = ({ onLoginSuccess }) => {
     // Simulate a small delay for UX
     await new Promise(r => setTimeout(r, 600));
 
+    const isLocalhost =
+      typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    const BASE_URL = import.meta.env.VITE_API_URL || (isLocalhost ? 'http://localhost:5000' : '');
+
     try {
       if (mode === 'register') {
+        const cleanEmail = email.trim().toLowerCase();
         const localUsers = getLocalUsers();
         const existingIndex = localUsers.findIndex(
-          (u) => u.email.toLowerCase() === email.toLowerCase()
+          (u) => u.email.toLowerCase() === cleanEmail
         );
 
         let userObj;
@@ -114,6 +120,17 @@ const LoginPage = ({ onLoginSuccess }) => {
           localStorage.setItem('netflix_local_users', JSON.stringify([...localUsers, userObj]));
         }
 
+        // Sync with backend server if running
+        if (BASE_URL) {
+          try {
+            await fetch(`${BASE_URL}/api/register`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: email.trim(), password, name: name.trim() }),
+            });
+          } catch (_) { /* ignore if backend offline */ }
+        }
+
         if (rememberMe) {
           localStorage.setItem('netflix_remembered_email', userObj.email);
           localStorage.setItem('netflix_remember_me', 'true');
@@ -127,78 +144,62 @@ const LoginPage = ({ onLoginSuccess }) => {
       }
 
       // LOGIN MODE
-      // 1. Check locally registered users
-      const localUsers = getLocalUsers();
-      const localUser = localUsers.find(
-        (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-      );
-      if (localUser) {
-        if (rememberMe) {
-          localStorage.setItem('netflix_remembered_email', localUser.email);
-          localStorage.setItem('netflix_remember_me', 'true');
-        } else {
-          localStorage.removeItem('netflix_remembered_email');
-          localStorage.setItem('netflix_remember_me', 'false');
-        }
-        onLoginSuccess({ id: localUser.id, email: localUser.email, name: localUser.name }, rememberMe);
-        return;
-      }
+      const cleanEmail = email.trim().toLowerCase();
 
-      // 2. Preset accounts
-      const PRESET_USERS = [
-        { id: 1, email: 'demo@example.com', password: 'password123', name: 'Demo User' },
-        { id: 2, email: 'test@netflix.com', password: 'netflix123', name: 'Test User' },
-        { id: 3, email: 'princedaniel081104@gmail.com', password: 'prince123', name: 'Prince Daniel' },
-      ];
-      const presetUser = PRESET_USERS.find(
-        (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-      );
-      if (presetUser) {
-        if (rememberMe) {
-          localStorage.setItem('netflix_remembered_email', presetUser.email);
-          localStorage.setItem('netflix_remember_me', 'true');
-        } else {
-          localStorage.removeItem('netflix_remembered_email');
-          localStorage.setItem('netflix_remember_me', 'false');
-        }
-        onLoginSuccess({ id: presetUser.id, email: presetUser.email, name: presetUser.name }, rememberMe);
-        return;
-      }
-
-      // 3. Fallback backend check if backend server is running (only when on localhost or VITE_API_URL is configured)
-      const isLocalhost =
-        typeof window !== 'undefined' &&
-        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-      const BASE_URL = import.meta.env.VITE_API_URL || (isLocalhost ? 'http://localhost:5000' : '');
-
+      // 1. If backend server is running, check with backend first
       if (BASE_URL) {
         try {
           const response = await fetch(`${BASE_URL}/api/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password }),
+            body: JSON.stringify({ email: cleanEmail, password }),
           });
-          if (response.ok) {
-            const data = await response.json();
-            if (data.success) {
-              if (rememberMe) {
-                localStorage.setItem('netflix_remembered_email', email);
-                localStorage.setItem('netflix_remember_me', 'true');
-              } else {
-                localStorage.removeItem('netflix_remembered_email');
-                localStorage.setItem('netflix_remember_me', 'false');
-              }
-              onLoginSuccess(data.user || { email, name: email.split('@')[0] }, rememberMe);
-              return;
+          const data = await response.json().catch(() => ({}));
+          if (response.ok && data.success) {
+            if (rememberMe) {
+              localStorage.setItem('netflix_remembered_email', cleanEmail);
+              localStorage.setItem('netflix_remember_me', 'true');
+            } else {
+              localStorage.removeItem('netflix_remembered_email');
+              localStorage.setItem('netflix_remember_me', 'false');
             }
+            onLoginSuccess(data.user || { email: cleanEmail, name: cleanEmail.split('@')[0] }, rememberMe);
+            return;
+          } else if (data && data.message) {
+            setServerError(data.message);
+            return;
           }
-        } catch (_) { /* backend not reachable on network */ }
+        } catch (_) { /* backend not reachable on network, fallback to local storage check */ }
       }
 
-      setServerError('Invalid email or password');
+      // 2. Fallback check locally registered users in localStorage
+      const localUsers = getLocalUsers();
+      const localUser = localUsers.find(
+        (u) => u.email.toLowerCase() === cleanEmail
+      );
+
+      if (!localUser) {
+        setServerError('New user, please sign up first');
+        return;
+      }
+
+      if (localUser.password !== password) {
+        setServerError('Login failed: Incorrect password.');
+        return;
+      }
+
+      if (rememberMe) {
+        localStorage.setItem('netflix_remembered_email', localUser.email);
+        localStorage.setItem('netflix_remember_me', 'true');
+      } else {
+        localStorage.removeItem('netflix_remembered_email');
+        localStorage.setItem('netflix_remember_me', 'false');
+      }
+      onLoginSuccess({ id: localUser.id, email: localUser.email, name: localUser.name }, rememberMe);
+      return;
     } catch (error) {
-      setServerError('Invalid email or password');
       console.error('Auth error:', error);
+      setServerError('Login failed: Please check your credentials and try again.');
     } finally {
       setLoading(false);
     }
@@ -322,11 +323,22 @@ const LoginPage = ({ onLoginSuccess }) => {
 
           {/* Server error */}
           {serverError && (
-            <div className="flex items-center gap-2 bg-red-500/12 border border-red-400/50 rounded px-3 py-2.5 text-[#ff9a9a] text-sm">
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" className="shrink-0">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-              {serverError}
+            <div className="flex flex-col gap-1.5 bg-red-500/15 border border-red-400/50 rounded px-3 py-2.5 text-sm">
+              <div className="flex items-center gap-2 text-[#ff9a9a]">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" className="shrink-0">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <span className="font-medium">{serverError}</span>
+              </div>
+              {mode === 'login' && serverError.toLowerCase().includes('sign up') && (
+                <button
+                  type="button"
+                  onClick={() => switchMode('register')}
+                  className="text-xs text-white/90 underline hover:text-white text-left pl-7 cursor-pointer"
+                >
+                  Click here to Sign Up first →
+                </button>
+              )}
             </div>
           )}
 
