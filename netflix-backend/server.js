@@ -115,11 +115,19 @@ app.post('/api/register', (req, res) => {
   }
 
   // Check if user already exists
-  const existingUser = mockUsers.find(u => u.email === email);
+  const existingUser = mockUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
   if (existingUser) {
-    return res.status(409).json({
-      success: false,
-      message: 'Email already registered'
+    existingUser.password = password;
+    if (name) existingUser.name = name;
+    return res.status(200).json({
+      success: true,
+      message: 'Account updated and logged in successfully',
+      user: {
+        id: existingUser.id,
+        email: existingUser.email,
+        name: existingUser.name
+      },
+      token: generateMockToken(existingUser.id)
     });
   }
 
