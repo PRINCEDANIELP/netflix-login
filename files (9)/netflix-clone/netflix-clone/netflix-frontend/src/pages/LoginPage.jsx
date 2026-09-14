@@ -88,10 +88,8 @@ const LoginPage = ({ onLoginSuccess }) => {
     // Simulate a small delay for UX
     await new Promise(r => setTimeout(r, 600));
 
-    const isLocalhost =
-      typeof window !== 'undefined' &&
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    const BASE_URL = import.meta.env.VITE_API_URL || (isLocalhost ? 'http://localhost:5000' : '');
+    // Always use relative /api path — Vite proxy forwards to localhost:5000
+    const BASE_URL = import.meta.env.VITE_API_URL || '';
 
     try {
       if (mode === 'register') {
@@ -102,35 +100,43 @@ const LoginPage = ({ onLoginSuccess }) => {
         );
 
         let userObj;
-        if (existingIndex >= 0) {
-          // If email is already in localStorage, update password and log in immediately
-          localUsers[existingIndex] = {
-            ...localUsers[existingIndex],
-            name: name.trim() || localUsers[existingIndex].name,
-            password,
-          };
-          userObj = localUsers[existingIndex];
-          localStorage.setItem('netflix_local_users', JSON.stringify(localUsers));
-        } else {
-          // Register new user
-          userObj = {
-            id: Date.now(),
-            email: email.trim(),
-            name: name.trim() || email.split('@')[0],
-            password,
-          };
-          localStorage.setItem('netflix_local_users', JSON.stringify([...localUsers, userObj]));
-        }
 
-        // Sync with backend server if running
-        if (BASE_URL) {
-          try {
-            await fetch(`${BASE_URL}/api/register`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email: email.trim(), password, name: name.trim() }),
-            });
-          } catch (_) { /* ignore if backend offline */ }
+        // Always try backend first for register
+        try {
+          const response = await fetch(`${BASE_URL}/api/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email.trim(), password, name: name.trim() }),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (response.ok && data.success) {
+            userObj = data.user || {
+              id: Date.now(),
+              email: email.trim(),
+              name: name.trim() || email.split('@')[0],
+            };
+          }
+        } catch (_) { /* backend offline – fall through to localStorage */ }
+
+        // Fallback: store in localStorage
+        if (!userObj) {
+          if (existingIndex >= 0) {
+            localUsers[existingIndex] = {
+              ...localUsers[existingIndex],
+              name: name.trim() || localUsers[existingIndex].name,
+              password,
+            };
+            userObj = localUsers[existingIndex];
+          } else {
+            userObj = {
+              id: Date.now(),
+              email: email.trim(),
+              name: name.trim() || email.split('@')[0],
+              password,
+            };
+            localUsers.push(userObj);
+          }
+          localStorage.setItem('netflix_local_users', JSON.stringify(localUsers));
         }
 
         if (rememberMe) {
@@ -148,31 +154,29 @@ const LoginPage = ({ onLoginSuccess }) => {
       // LOGIN MODE
       const cleanEmail = email.trim().toLowerCase();
 
-      // 1. If backend server is running, check with backend first
-      if (BASE_URL) {
-        try {
-          const response = await fetch(`${BASE_URL}/api/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: cleanEmail, password }),
-          });
-          const data = await response.json().catch(() => ({}));
-          if (response.ok && data.success) {
-            if (rememberMe) {
-              localStorage.setItem('netflix_remembered_email', cleanEmail);
-              localStorage.setItem('netflix_remember_me', 'true');
-            } else {
-              localStorage.removeItem('netflix_remembered_email');
-              localStorage.setItem('netflix_remember_me', 'false');
-            }
-            onLoginSuccess(data.user || { email: cleanEmail, name: cleanEmail.split('@')[0] }, rememberMe);
-            return;
-          } else if (data && data.message) {
-            setServerError(data.message);
-            return;
+      // 1. Always try backend first — request will always appear in Network tab
+      try {
+        const response = await fetch(`${BASE_URL}/api/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, password }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (response.ok && data.success) {
+          if (rememberMe) {
+            localStorage.setItem('netflix_remembered_email', cleanEmail);
+            localStorage.setItem('netflix_remember_me', 'true');
+          } else {
+            localStorage.removeItem('netflix_remembered_email');
+            localStorage.setItem('netflix_remember_me', 'false');
           }
-        } catch (_) { /* backend not reachable on network, fallback to local storage check */ }
-      }
+          onLoginSuccess(data.user || { email: cleanEmail, name: cleanEmail.split('@')[0] }, rememberMe);
+          return;
+        } else if (data && data.message) {
+          setServerError(data.message);
+          return;
+        }
+      } catch (_) { /* backend not reachable – fallback to localStorage */ }
 
       // 2. Fallback check locally registered users in localStorage
       const localUsers = getLocalUsers();

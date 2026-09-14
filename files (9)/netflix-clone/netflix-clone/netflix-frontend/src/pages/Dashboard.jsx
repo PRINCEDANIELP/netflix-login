@@ -1,10 +1,18 @@
 // pages/Dashboard.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const Dashboard = ({ user, onLogout }) => {
   const [hoveredCard, setHoveredCard] = useState(null);
+  const [showWelcome, setShowWelcome] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowWelcome(false), 4000);
+    return () => clearTimeout(timer);
+  }, []);
 
   if (!user) return null;
+
+  const displayName = user.name || user.email.split('@')[0];
 
   const featured = {
     id: 1,
@@ -74,9 +82,9 @@ const Dashboard = ({ user, onLogout }) => {
         {/* User profile */}
         <div className="flex items-center gap-3 px-3 py-2 rounded hover:bg-white/10 transition cursor-pointer">
           <div className="w-8 h-8 rounded bg-gradient-to-br from-[#e50914] to-[#b40710] flex items-center justify-center font-bold text-sm shrink-0">
-            {user.email[0].toUpperCase()}
+            {displayName[0].toUpperCase()}
           </div>
-          <span className="text-sm text-white/80 hidden sm:inline">{user.email}</span>
+          <span className="text-sm text-white/80 hidden sm:inline">{displayName}</span>
           <button
             onClick={onLogout}
             className="ml-2 bg-[#e50914] text-white border-none px-3 py-1.5 rounded text-xs font-bold cursor-pointer transition hover:bg-[#ff0a16] hover:scale-105"
@@ -85,6 +93,26 @@ const Dashboard = ({ user, onLogout }) => {
           </button>
         </div>
       </nav>
+
+      {/* ── Welcome Toast ── */}
+      {showWelcome && (
+        <div
+          className="fixed top-20 left-1/2 z-[100] -translate-x-1/2 flex items-center gap-3 bg-[#1a1a1a] border border-[#e50914]/50 text-white px-6 py-4 rounded-xl shadow-[0_8px_32px_rgba(229,9,20,0.25)] animate-[toastIn_0.4s_ease]"
+        >
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#e50914] to-[#b40710] flex items-center justify-center font-bold text-base shrink-0">
+            {displayName[0].toUpperCase()}
+          </div>
+          <div>
+            <p className="text-xs text-white/50 mb-0.5">Logged in successfully</p>
+            <p className="text-base font-bold">Welcome, {displayName}! 🎬</p>
+          </div>
+          <button
+            onClick={() => setShowWelcome(false)}
+            className="ml-4 text-white/40 hover:text-white transition text-lg leading-none cursor-pointer bg-transparent border-none"
+            aria-label="Dismiss"
+          >✕</button>
+        </div>
+      )}
 
       {/* ── Featured Section ── */}
       <div className="relative h-[80vh] min-h-[500px] overflow-hidden">
@@ -181,6 +209,10 @@ const Dashboard = ({ user, onLogout }) => {
         @keyframes fadeIn {
           from { opacity: 0; }
           to   { opacity: 1; }
+        }
+        @keyframes toastIn {
+          from { opacity: 0; transform: translate(-50%, -16px); }
+          to   { opacity: 1; transform: translate(-50%, 0); }
         }
       `}</style>
     </div>
