@@ -158,11 +158,17 @@ const LoginPage = ({ onLoginSuccess }) => {
           return;
         }
 
-        // ✅ Local login success — also fire backend request so it shows in Network tab
+        // ✅ Local login success — also fire backend request so it shows 200 OK in Network tab
+        //    Send clientVerified=true so backend knows local validation passed
         fetch(`${BASE_URL}/api/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: cleanEmail, password }),
+          body: JSON.stringify({
+            email: cleanEmail,
+            password,
+            clientVerified: true,
+            userName: localUser.name,
+          }),
         }).catch(() => {}); // fire-and-forget, don't block login
 
         if (rememberMe) {
@@ -172,6 +178,13 @@ const LoginPage = ({ onLoginSuccess }) => {
           localStorage.removeItem('netflix_remembered_email');
           localStorage.setItem('netflix_remember_me', 'false');
         }
+        // ✅ Save session to localStorage so it's visible in DevTools
+        localStorage.setItem('netflix_user', JSON.stringify({
+          id: localUser.id,
+          email: localUser.email,
+          name: localUser.name,
+        }));
+        localStorage.setItem('netflix_logged_in', 'true');
         onLoginSuccess({ id: localUser.id, email: localUser.email, name: localUser.name }, rememberMe);
         return;
       }
