@@ -146,7 +146,37 @@ const LoginPage = ({ onLoginSuccess }) => {
       // LOGIN MODE
       const cleanEmail = email.trim().toLowerCase();
 
-      // 1. Always try backend first — request will always appear in Network tab
+      // 1. Check localStorage FIRST — all registered users are stored here
+      //    (Vercel serverless functions don't share memory, so we can't rely on backend alone)
+      const localUsers = getLocalUsers();
+      const localUser = localUsers.find((u) => u.email.toLowerCase() === cleanEmail);
+
+      if (localUser) {
+        // User found in localStorage — validate password locally
+        if (localUser.password !== password) {
+          setServerError('Login failed: Incorrect password.');
+          return;
+        }
+
+        // ✅ Local login success — also fire backend request so it shows in Network tab
+        fetch(`${BASE_URL}/api/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, password }),
+        }).catch(() => {}); // fire-and-forget, don't block login
+
+        if (rememberMe) {
+          localStorage.setItem('netflix_remembered_email', localUser.email);
+          localStorage.setItem('netflix_remember_me', 'true');
+        } else {
+          localStorage.removeItem('netflix_remembered_email');
+          localStorage.setItem('netflix_remember_me', 'false');
+        }
+        onLoginSuccess({ id: localUser.id, email: localUser.email, name: localUser.name }, rememberMe);
+        return;
+      }
+
+      // 2. User NOT in localStorage — try backend (handles demo@example.com)
       try {
         const response = await fetch(`${BASE_URL}/api/login`, {
           method: 'POST',
@@ -165,44 +195,15 @@ const LoginPage = ({ onLoginSuccess }) => {
           onLoginSuccess(data.user || { email: cleanEmail, name: cleanEmail.split('@')[0] }, rememberMe);
           return;
         } else if (data && data.message) {
-          // Only stop here for 'wrong password' — user exists but pw is wrong
-          // For 'user not found' (401), fall through to localStorage check below
-          const isWrongPassword =
-            response.status === 401 &&
-            data.message.toLowerCase().includes('incorrect');
-          if (isWrongPassword) {
-            setServerError(data.message);
-            return;
-          }
-          // else: user not found in backend → check localStorage next
+          setServerError(data.message);
+          return;
         }
-      } catch (_) { /* backend not reachable – fallback to localStorage */ }
+      } catch (_) { /* backend not reachable */ }
 
-      // 2. Fallback check locally registered users in localStorage
-      const localUsers = getLocalUsers();
-      const localUser = localUsers.find(
-        (u) => u.email.toLowerCase() === cleanEmail
-      );
-
-      if (!localUser) {
-        setServerError('New user, please sign up first');
-        return;
-      }
-
-      if (localUser.password !== password) {
-        setServerError('Login failed: Incorrect password.');
-        return;
-      }
-
-      if (rememberMe) {
-        localStorage.setItem('netflix_remembered_email', localUser.email);
-        localStorage.setItem('netflix_remember_me', 'true');
-      } else {
-        localStorage.removeItem('netflix_remembered_email');
-        localStorage.setItem('netflix_remember_me', 'false');
-      }
-      onLoginSuccess({ id: localUser.id, email: localUser.email, name: localUser.name }, rememberMe);
+      // 3. Not found anywhere
+      setServerError('New user, please sign up first');
       return;
+
     } catch (error) {
       console.error('Auth error:', error);
       setServerError('Login failed: Please check your credentials and try again.');
