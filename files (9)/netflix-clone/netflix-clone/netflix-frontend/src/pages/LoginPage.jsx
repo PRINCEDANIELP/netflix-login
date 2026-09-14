@@ -10,6 +10,7 @@ const LoginPage = ({ onLoginSuccess }) => {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -139,15 +140,14 @@ const LoginPage = ({ onLoginSuccess }) => {
           localStorage.setItem('netflix_local_users', JSON.stringify(localUsers));
         }
 
-        if (rememberMe) {
-          localStorage.setItem('netflix_remembered_email', userObj.email);
-          localStorage.setItem('netflix_remember_me', 'true');
-        } else {
-          localStorage.removeItem('netflix_remembered_email');
-          localStorage.setItem('netflix_remember_me', 'false');
-        }
-
-        onLoginSuccess({ id: userObj.id, email: userObj.email, name: userObj.name }, rememberMe);
+        // ✅ Account created — redirect to Sign In (NOT dashboard)
+        // Pre-fill email so user can sign in easily
+        setEmail(userObj.email);
+        setPassword('');
+        setConfirmPassword('');
+        setName('');
+        setMode('login');
+        setSuccessMessage(`Account created! Welcome, ${userObj.name}. Please sign in to continue.`);
         return;
       }
 
@@ -215,6 +215,7 @@ const LoginPage = ({ onLoginSuccess }) => {
     setMode(nextMode);
     setErrors({});
     setServerError('');
+    setSuccessMessage('');
     setShowPassword(false);
     setShowConfirmPassword(false);
   };
@@ -370,6 +371,16 @@ const LoginPage = ({ onLoginSuccess }) => {
               {errors.confirmPassword && (
                 <span className="text-[#ff7e7e] text-xs">{errors.confirmPassword}</span>
               )}
+            </div>
+          )}
+
+          {/* ✅ Success message (shown after register → redirected to sign in) */}
+          {successMessage && (
+            <div className="flex items-start gap-2 bg-green-500/15 border border-green-400/50 rounded px-3 py-2.5 text-sm text-[#86efac]">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" className="shrink-0 mt-0.5">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              <span className="font-medium">{successMessage}</span>
             </div>
           )}
 
