@@ -119,26 +119,18 @@ const LoginPage = ({ onLoginSuccess }) => {
           }
         } catch (_) { /* backend offline – fall through to localStorage */ }
 
-        // Fallback: store in localStorage
-        if (!userObj) {
-          if (existingIndex >= 0) {
-            localUsers[existingIndex] = {
-              ...localUsers[existingIndex],
-              name: name.trim() || localUsers[existingIndex].name,
-              password,
-            };
-            userObj = localUsers[existingIndex];
-          } else {
-            userObj = {
-              id: Date.now(),
-              email: email.trim(),
-              name: name.trim() || email.split('@')[0],
-              password,
-            };
-            localUsers.push(userObj);
-          }
-          localStorage.setItem('netflix_local_users', JSON.stringify(localUsers));
+        // Always save to localStorage (login fallback needs this,
+        // since Vercel serverless functions don't share memory)
+        const localUsers2 = getLocalUsers();
+        const existingIdx2 = localUsers2.findIndex(u => u.email.toLowerCase() === (userObj?.email || email.trim()).toLowerCase());
+        const localSaveObj = { id: userObj?.id || Date.now(), email: email.trim(), name: (userObj?.name || name.trim() || email.split('@')[0]), password };
+        if (existingIdx2 >= 0) {
+          localUsers2[existingIdx2] = { ...localUsers2[existingIdx2], ...localSaveObj };
+        } else {
+          localUsers2.push(localSaveObj);
         }
+        localStorage.setItem('netflix_local_users', JSON.stringify(localUsers2));
+        if (!userObj) userObj = localSaveObj;
 
         // ✅ Account created — redirect to Sign In (NOT dashboard)
         // Pre-fill email so user can sign in easily
@@ -173,8 +165,16 @@ const LoginPage = ({ onLoginSuccess }) => {
           onLoginSuccess(data.user || { email: cleanEmail, name: cleanEmail.split('@')[0] }, rememberMe);
           return;
         } else if (data && data.message) {
-          setServerError(data.message);
-          return;
+          // Only stop here for 'wrong password' — user exists but pw is wrong
+          // For 'user not found' (401), fall through to localStorage check below
+          const isWrongPassword =
+            response.status === 401 &&
+            data.message.toLowerCase().includes('incorrect');
+          if (isWrongPassword) {
+            setServerError(data.message);
+            return;
+          }
+          // else: user not found in backend → check localStorage next
         }
       } catch (_) { /* backend not reachable – fallback to localStorage */ }
 
